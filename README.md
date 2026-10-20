@@ -1,9 +1,12 @@
 # TMR Municipal Budget Tracker
 
 Shows which cities, counties, townships, park districts and school districts to call each month, based on
-**when each one builds its budget**. Covers all 50 states and DC (about 17,900 governments).
+**when each one builds its budget**. Covers all 50 states and DC: about 45,000 governments, including every small town and township.
 
-By default it includes places with 10,000+ people, **plus** any smaller town or park district that spends $500k+/yr on parks & rec. Park districts are separate governments that run parks in Illinois, North Dakota, California, Ohio, Washington, Colorado, Oregon and other states.
+By default the app shows every town. Use **Min population** in the sidebar to focus on bigger places. The
+**…or parks & rec spending** box keeps small towns that spend heavily on parks even when you raise the population minimum.
+Park districts (separate governments that run parks in Illinois, North Dakota, California, Ohio, Washington, Colorado,
+Oregon and other states) are included.
 
 ## How it works
 Every local government reports its fiscal year end date to the U.S. Census Bureau. Counting from the
@@ -32,10 +35,11 @@ All data comes from free public Census Bureau files, so no API keys are needed.
 - **Fiscal year end, population, enrollment and parks & rec spending:** the 2022 Census of Governments, which covers every unit, plus the 2024 Annual Survey of State & Local Government Finances where it has newer values.
 - **Map locations:** the 2024 Census Gazetteer files.
 
-`data/governments.csv` is already built. To refresh it when Census posts a new year, update the URLs in `build_data.py` and run:
+`data/governments.csv` is already built. Census posts a new finance year each summer, about two years after the data year. Starting **Aug 1, 2027** (the date is set in `data/meta.json`), the app shows a yellow "Time to refresh the data" banner. To refresh, add the new year's Individual Unit File URL to `FIN_YEARS` in `build_data.py` (keep 2022, which covers every government), then run:
 ```
 python build_data.py
 ```
+Then upload the new `data/` folder to GitHub. The banner clears itself, and the next check date moves forward a year.
 
 ## Run locally
 ```

@@ -2,6 +2,7 @@
 government's fiscal-year budget cycle (all 50 states + DC)."""
 from __future__ import annotations
 
+import json
 import re
 from datetime import date
 from pathlib import Path
@@ -13,12 +14,36 @@ import streamlit as st
 from cycle import DEFAULT_WINDOWS, MONTHS, PHASES, phase_for, window_text
 
 DATA = Path(__file__).parent / "data" / "governments.csv"
+META = Path(__file__).parent / "data" / "meta.json"
 TMR_GREEN = "#083400"
 
 st.set_page_config(page_title="TMR Budget Tracker", page_icon="📞", layout="wide")
+# TMR brand theme. Built into the app so it works even if the hidden .streamlit/ folder
+# doesn't make it into the GitHub repo.
+TMR_GREEN_LIGHT = "#eef4ec"
 st.markdown(f"""<style>
-h1, h2, h3 {{ color: {TMR_GREEN}; }}
+/* Header bar */
+.tmr-bar {{ background: {TMR_GREEN}; color: #fff; padding: 18px 24px; border-radius: 10px; margin-bottom: 18px; }}
+.tmr-bar h1 {{ color: #fff !important; margin: 0; padding: 0; font-size: 1.9rem; }}
+.tmr-bar p {{ color: #d7e5d2; margin: 4px 0 0; font-size: 0.95rem; }}
+h2, h3 {{ color: {TMR_GREEN}; }}
+/* Sidebar */
+section[data-testid="stSidebar"] {{ background: {TMR_GREEN_LIGHT}; border-right: 3px solid {TMR_GREEN}; }}
+section[data-testid="stSidebar"] h2 {{ color: {TMR_GREEN}; }}
+/* Metric cards */
+div[data-testid="stMetric"] {{ background: #fff; border: 1px solid #dde3da; border-left: 5px solid {TMR_GREEN};
+    border-radius: 8px; padding: 10px 14px; }}
 div[data-testid="stMetricValue"] {{ color: {TMR_GREEN}; }}
+/* Buttons */
+.stButton > button, .stDownloadButton > button {{ background: {TMR_GREEN}; color: #fff; border: 1px solid {TMR_GREEN}; }}
+.stButton > button:hover, .stDownloadButton > button:hover {{ background: #1d5a12; color: #fff; border-color: #1d5a12; }}
+/* Multiselect chips */
+span[data-baseweb="tag"] {{ background-color: {TMR_GREEN} !important; color: #fff !important; }}
+/* Tabs */
+button[data-baseweb="tab"][aria-selected="true"] p {{ color: {TMR_GREEN}; font-weight: 700; }}
+div[data-baseweb="tab-highlight"] {{ background-color: {TMR_GREEN}; }}
+/* Inputs: focus ring */
+div[data-baseweb="input"]:focus-within, div[data-baseweb="select"] > div:focus-within {{ border-color: {TMR_GREEN} !important; }}
 </style>""", unsafe_allow_html=True)
 
 STATE_NAMES = {
@@ -43,7 +68,9 @@ def load() -> pd.DataFrame:
     # Ranking score: people served, or for park districts ~1 "resident" per $100 of parks spending
     df["rank_score"] = df["size"].fillna(df["parks_spend"] / 100)
     # Census parks & rec spending only applies to cities/counties/townships
-    df.loc[df["type"].isin(["School District", "Community College"]), "parks_spend"] = pd.NA
+    df["parks_spend"] = df["parks_spend"].astype(float)
+    df.loc[df["type"].isin(["School District", "Community College"]), "parks_spend"] = float("nan")
+    df["parks_m"] = (df["parks_spend"] / 1e6).round(1)
     return df
 
 
@@ -68,6 +95,10 @@ def hubspot_keys(file) -> set[str]:
 
 df = load()
 today = date.today()
+try:
+    meta = json.loads(META.read_text())
+except (OSError, ValueError):
+    meta = {}
 
 # ---------------- Sidebar ----------------
 with st.sidebar:
@@ -79,7 +110,8 @@ with st.sidebar:
                             placeholder="All states")
     types = st.multiselect("Government type", sorted(df["type"].unique()),
                            default=["City/Town", "County", "Park District", "School District"])
-    min_pop = st.number_input("Min population (cities, counties, townships)", 0, 5_000_000, 10_000, step=5_000)
+    min_pop = st.number_input("Min population (cities, counties, townships)", 0, 5_000_000, 0, step=2_500,
+                              help="0 = every town, however small. Try 10,000 to focus on larger places.")
     or_parks = st.number_input("…or parks & rec spending of at least ($/yr)", 250_000, 1_000_000_000, 500_000,
                                step=250_000,
                                help="Also includes smaller towns and park districts that spend at least this much "
@@ -123,9 +155,18 @@ f["in_hubspot"] = (f["state"] + "|" + f["name"].map(key)).isin(hs_keys) if hs_ke
 f = f.sort_values(["priority", "rank_score"], ascending=[True, False])
 
 # ---------------- Header ----------------
-st.title("Municipal Budget Tracker")
-st.caption(f"Who to call in **{month}**, based on when each government builds its budget. "
-           f"{'All states' if not states else ', '.join(states)} · {len(f):,} governments")
+# Data refresh reminder: Census usually posts a new finance year each summer
+refresh_on = meta.get("refresh_check_on")
+if refresh_on and today >= date.fromisoformat(refresh_on):
+    st.warning(f"🔄 **Time to refresh the data.** This app uses Census data through {meta.get('latest_finance_year')}, "
+               "and a newer year is likely out. Check census.gov for the new Individual Unit File, add it to "
+               "`FIN_YEARS` in `build_data.py`, run `python build_data.py`, and push the new `data/` folder to GitHub.")
+
+st.markdown(
+    f"""<div class="tmr-bar"><h1>Municipal Budget Tracker</h1>
+    <p>Who to call in <b>{month}</b>, based on when each government builds its budget ·
+    {'All states' if not states else ', '.join(states)} · {len(f):,} governments</p></div>""",
+    unsafe_allow_html=True)
 
 c = f["phase_key"].value_counts()
 k1, k2, k3, k4, k5 = st.columns(5)
@@ -138,7 +179,7 @@ k5.metric("🔴 Budget locked", f"{c.get('locked', 0):,}")
 show_cols = {
     "phase": "Status", "name": "Government", "type": "Type", "state": "State", "county": "County",
     "size": "Population / enrollment", "fy_starts": "FY starts", "best_window": "Best call window",
-    "parks_spend": "Parks & rec spend ($/yr)", "what_to_do": "What to do",
+    "parks_m": "Parks & rec ($M/yr)", "what_to_do": "What to do",
 }
 if hs_keys:
     show_cols["in_hubspot"] = "In HubSpot"
@@ -155,7 +196,7 @@ with tab_list:
         hide_index=True, width="stretch", height=560,
         column_config={
             "Population / enrollment": st.column_config.NumberColumn(format="localized"),
-            "Parks & rec spend ($/yr)": st.column_config.NumberColumn(format="dollar"),
+            "Parks & rec ($M/yr)": st.column_config.NumberColumn(format="$%.1fM"),
         },
     )
     st.download_button("⬇ Download this list (CSV)", view[list(show_cols)].rename(columns=show_cols)
@@ -240,3 +281,7 @@ Park districts (separate governments that run parks, common in IL, ND, CA, OH, W
 along with any smaller town that spends at least the parks & rec amount set in the sidebar. Park districts don't report
 population, so they're ranked by parks spending.
 """)
+
+if meta:
+    st.caption(f"Data: U.S. Census Bureau finance data ({', '.join(map(str, meta.get('finance_years', [])))}) · "
+               f"built {meta.get('built_on')} · next refresh check {meta.get('refresh_check_on')}")

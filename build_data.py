@@ -15,6 +15,7 @@ Re-run once a year when Census posts a new finance year.
 from __future__ import annotations
 
 import io
+import json
 import re
 import sys
 import zipfile
@@ -43,7 +44,7 @@ PARKS_ITEMS = {"E61", "F61", "G61"}  # Parks & Rec: current operation, construct
 #   Cities/counties/townships: population >= MIN_POP, OR parks & rec spending >= MIN_PARKS (small towns that spend big)
 #   Park districts (IL, ND, CA, OH, WA, CO, OR...): parks & rec spending >= MIN_PARKS
 #   School districts: enrollment >= MIN_ENROLL
-MIN_POP = 5_000
+MIN_POP = 0  # keep every city, town, township and county (small towns included); the app filters by size
 MIN_PARKS = 250_000
 MIN_ENROLL = 1_000
 
@@ -217,6 +218,13 @@ def main() -> None:
     out = out.sort_values(["state", "type", "population"], ascending=[True, True, False])
     OUT.parent.mkdir(exist_ok=True)
     out.to_csv(OUT, index=False)
+
+    # Refresh reminder for the app: Census posts finance data ~2 years after the data year,
+    # usually in July/August (2024 data came out summer 2026).
+    latest = max(FIN_YEARS)
+    meta = {"finance_years": sorted(FIN_YEARS), "latest_finance_year": latest,
+            "built_on": date.today().isoformat(), "refresh_check_on": f"{latest + 3}-08-01"}
+    (OUT.parent / "meta.json").write_text(json.dumps(meta, indent=2))
     print(f"Wrote {len(out):,} governments to {OUT}")
     print(out["type"].value_counts().to_string())
     print("Location match:", out["location"].value_counts().to_dict())
