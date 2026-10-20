@@ -30,15 +30,18 @@ h2, h3 {{ color: {TMR_GREEN}; }}
 /* Sidebar */
 section[data-testid="stSidebar"] {{ background: {TMR_GREEN_LIGHT}; border-right: 3px solid {TMR_GREEN}; }}
 section[data-testid="stSidebar"] h2 {{ color: {TMR_GREEN}; }}
+section[data-testid="stSidebar"] label, section[data-testid="stSidebar"] label p,
+section[data-testid="stSidebar"] summary p {{ color: #1b1f1a !important; }}
 /* Metric cards */
 div[data-testid="stMetric"] {{ background: #fff; border: 1px solid #dde3da; border-left: 5px solid {TMR_GREEN};
     border-radius: 8px; padding: 10px 14px; }}
 div[data-testid="stMetricValue"] {{ color: {TMR_GREEN}; }}
+div[data-testid="stMetricLabel"], div[data-testid="stMetricLabel"] p {{ color: #1b1f1a !important; }}
 /* Buttons */
 .stButton > button, .stDownloadButton > button {{ background: {TMR_GREEN}; color: #fff; border: 1px solid {TMR_GREEN}; }}
 .stButton > button:hover, .stDownloadButton > button:hover {{ background: #1d5a12; color: #fff; border-color: #1d5a12; }}
 /* Multiselect chips */
-span[data-baseweb="tag"] {{ background-color: {TMR_GREEN} !important; color: #fff !important; }}
+span[data-baseweb="tag"], div[data-baseweb="tag"] {{ background-color: {TMR_GREEN} !important; color: #fff !important; }}
 /* Tabs */
 button[data-baseweb="tab"][aria-selected="true"] p {{ color: {TMR_GREEN}; font-weight: 700; }}
 div[data-baseweb="tab-highlight"] {{ background-color: {TMR_GREEN}; }}
@@ -61,7 +64,8 @@ STATE_NAMES = {
 
 
 @st.cache_data
-def load() -> pd.DataFrame:
+def load(version: float = 0) -> pd.DataFrame:
+    """version = file timestamp, so a new governments.csv on GitHub busts the cache."""
     df = pd.read_csv(DATA)
     df["size"] = df["population"].where(df["population"] > 0, df["enrollment"])
     df.loc[df["type"] == "Park District", "size"] = pd.NA  # park districts don't report population
@@ -93,7 +97,7 @@ def hubspot_keys(file) -> set[str]:
     return set(states + "|" + hs[name_col].map(key))
 
 
-df = load()
+df = load(DATA.stat().st_mtime)
 today = date.today()
 try:
     meta = json.loads(META.read_text())
